@@ -34,7 +34,7 @@ class SkillMappingAgent:
             tools=self.tools,
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=12,
+            max_iterations=50,
         )
     
     def _create_tools(self) -> List[Tool]:
@@ -66,12 +66,13 @@ class SkillMappingAgent:
         ## Guidelines for Skill Decomposition:
         1. Start with the main skill as the root node
         2. Break it down into 3-5 major categories or sub-skills
-        3. For each sub-skill, further break it down into specific learnable components
+        3. For each sub-skill, further break it down into specific 5-6 learnable components 
         4. Ensure a logical progression from fundamentals to advanced topics
         5. Assign reasonable time estimates to each leaf node (concrete skill)
         6. Include specific learning resources for each node
         7. Consider the user's background, learning style, and time constraints
         8. Add proper parent-child relationships and depth levels
+        9. Required to have 30 leaf nodes (non root nodes)
         
         ## Output Format:
         Your final answer must be valid JSON matching this structure:
