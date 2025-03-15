@@ -6,11 +6,11 @@ import { UserProfileSchema } from './userProfile';
 
 // Zod Schema for Skill Map
 export const SkillMapSchema = z.object({
-  id: z.string().min(1),
-  rootSkill: z.string().min(1),
-  nodes: z.record(z.string(), SkillNodeSchema),
-  totalEstimatedHours: z.number().min(0),
-  expectedCompletionDate: z.date(),
+  id: z.string().min(1).optional(),
+  rootSkill: z.string().min(1).optional(),
+  nodes: z.record(z.string(), SkillNodeSchema).optional(),
+  totalEstimatedHours: z.number().min(0).optional(),
+  expectedCompletionDate: z.date().optional(),
   userId: z.string().optional()
 });
 
