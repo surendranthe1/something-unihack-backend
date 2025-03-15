@@ -1,91 +1,62 @@
 // src/app.ts
 import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import config from './core/config';
-import logger from './core/logger';
-import database from './core/database';
-import { errorMiddleware } from './middlewares/errorMiddleware';
-import routes from './api/routes';
+import env from './config/env';
+import { connectToDatabase } from './config/database';
+import { configureServer } from './config/server';
+import routes from './routes';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import logger from './utils/logger';
 
-class App {
-  public app: express.Application;
+// Initialize express app
+const app = express();
 
-  constructor() {
-    this.app = express();
-    this.initializeMiddlewares();
-    this.connectToDatabase();
-    this.initializeRoutes();
-    this.initializeErrorHandling();
-  }
+// Configure server (middleware, security, etc.)
+configureServer(app);
 
-  private initializeMiddlewares() {
-    // Security middleware
-    this.app.use(helmet());
+// Register API routes
+app.use(env.API_PREFIX, routes);
 
-    // CORS middleware
-    this.app.use(cors({
-      origin: [
-        'http://localhost:5173', // React frontend
-        'http://localhost:8080'  // Potential admin frontend
-      ],
-      methods: ['GET', 'POST', 'PUT', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'Authorization']
-    }));
+// 404 handler for undefined routes
+app.use('*', notFoundHandler);
 
-    // Body parsing middleware
-    this.app.use(express.json());
-    this.app.use(express.urlencoded({ extended: true }));
-  }
+// Global error handler
+app.use(errorHandler);
 
-  private async connectToDatabase() {
-    try {
-      await database.connect();
-    } catch (error) {
-      logger.error('Failed to connect to database', { error });
-      process.exit(1);
-    }
-  }
-
-  private initializeRoutes() {
-    // Health check route
-    this.app.get('/health', (req, res) => {
-      res.status(200).json({ 
-        status: 'healthy', 
-        timestamp: new Date().toISOString() 
-      });
+// Connect to database and start server
+const startServer = async () => {
+  try {
+    // Connect to MongoDB
+    await connectToDatabase();
+    
+    // Start the server
+    const server = app.listen(env.PORT, () => {
+      logger.info(`Server running in ${env.NODE_ENV} mode on port ${env.PORT}`);
+      logger.info(`API accessible at http://localhost:${env.PORT}${env.API_PREFIX}`);
     });
-
-    // Mount application routes
-    this.app.use('/api', routes);
-  }
-
-  private initializeErrorHandling() {
-    // Error middleware (should be last)
-    this.app.use(errorMiddleware);
-  }
-
-  public listen() {
-    const server = this.app.listen(config.port, () => {
-      logger.info(`Server running on port ${config.port}`);
-      logger.info(`Environment: ${config.nodeEnv}`);
+    
+    // Handle unhandled promise rejections
+    process.on('unhandledRejection', (err: Error) => {
+      logger.error('Unhandled Rejection:', err);
+      // Close server & exit process
+      server.close(() => process.exit(1));
     });
-
-    // Graceful shutdown
+    
+    // Handle SIGTERM
     process.on('SIGTERM', () => {
       logger.info('SIGTERM received. Shutting down gracefully');
       server.close(() => {
-        database.disconnect();
-        process.exit(0);
+        logger.info('Process terminated');
       });
     });
-
-    return server;
+    
+  } catch (error) {
+    logger.error('Failed to start server:', error);
+    process.exit(1);
   }
-}
+};
 
-// Instantiate and start the application
-const app = new App();
-app.listen();
+// Start the server
+startServer();
 
+// Export app for testing
 export default app;

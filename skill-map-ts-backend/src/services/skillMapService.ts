@@ -1,166 +1,185 @@
 // src/services/skillMapService.ts
-import { SkillMapModel } from '../api/models/skillMap';
-import { SkillNodeModel } from '../api/models/skillNode';
-import aiService from './aiService';
-import logger from '../core/logger';
-import { 
-  SkillMap, 
-  SkillMapRequest, 
-  ProgressData, 
-  ContextChange,
-  UserProfile 
-} from '../api/models';
-import mongoose from 'mongoose';
+import pythonApiClient from '../utils/pythonApiClient';
+import cacheService from './cacheService';
+import logger from '../utils/logger';
+import SkillMap, { ISkillMap } from '../models/SkillMap';
+import { ApplicationError } from '../middleware/errorHandler';
+import { SkillMapRequest, UserProfile, LearningPreferences } from '../models/dto/SkillMapDto';
+
+const USE_MOCK_DATA = true;
 
 class SkillMapService {
   /**
-   * Generate a new skill map
-   * @param request Skill map generation request
-   * @returns Generated and saved skill map
+   * Generate a skill map using the Python AI service
    */
-  async generateSkillMap(request: SkillMapRequest): Promise<SkillMap> {
+  async generateSkillMap(request: SkillMapRequest): Promise<ISkillMap> {
     try {
-      // Use AI service to generate skill map
-      const skillMapFromAI = await aiService.generateSkillMap(request);
-
-      // Create Mongoose document
-      const skillMapDocument = new SkillMapModel({
-        id: new mongoose.Types.ObjectId().toString(),
-        rootSkill: skillMapFromAI.rootSkill,
-        nodes: skillMapFromAI.nodes,
-        totalEstimatedHours: skillMapFromAI.totalEstimatedHours,
-        expectedCompletionDate: skillMapFromAI.expectedCompletionDate,
-        userId: request.userProfile?.userId
-      });
-
-      // Save to database
-      await skillMapDocument.save();
-
-      logger.info('Skill map generated and saved', { 
-        rootSkill: skillMapFromAI.rootSkill,
-        userId: request.userProfile?.userId 
-      });
-
-      return skillMapDocument.toObject();
-    } catch (error) {
-      logger.error('Failed to generate skill map', { 
-        error: error instanceof Error ? error.message : error,
-        skillName: request.skillName 
-      });
-
-      throw new Error('Failed to generate skill map');
-    }
-  }
-
-  /**
-   * Update progress for a skill map
-   * @param skillMapId Skill map identifier
-   * @param userId User identifier
-   * @param progressData Progress update details
-   * @param contextChanges Optional context changes
-   * @returns Updated skill map
-   */
-  async updateProgress(
-    skillMapId: string, 
-    userId: string, 
-    progressData: ProgressData[], 
-    contextChanges?: ContextChange[]
-  ): Promise<SkillMap> {
-    try {
-      // Find the existing skill map
-      const existingSkillMap = await SkillMapModel.findById(skillMapId);
-
-      if (!existingSkillMap) {
-        throw new Error('Skill map not found');
+      // Generate cache key based on request parameters
+      const cacheKey = this.generateCacheKey(request);
+      
+      // Check if we have this skill map in cache
+      const cachedMap = cacheService.get<ISkillMap>(cacheKey);
+      if (cachedMap) {
+        logger.info(`Returning cached skill map for: ${request.skill_name}`);
+        return cachedMap;
       }
-
-      // Use AI service to update progress
-      const updatedSkillMapFromAI = await aiService.updateProgress(
-        skillMapId, 
-        userId, 
-        progressData
-      );
-
-      // Update the existing skill map document
-      existingSkillMap.nodes = updatedSkillMapFromAI.nodes;
-      existingSkillMap.expectedCompletionDate = updatedSkillMapFromAI.expectedCompletionDate;
-
-      // Save updated skill map
-      await existingSkillMap.save();
-
-      logger.info('Skill map progress updated', { 
-        skillMapId, 
-        userId 
+      
+      // Call the Python API to generate the skill map
+      console.log(`Generating skill map for: ${request.skill_name}`);
+      
+      // This should now return response.data directly
+      const responseData = await pythonApiClient.post<any>('/api/generate_skill_map', request);
+      
+      console.log('Raw API response data type:', typeof responseData);
+      console.log('Raw API response data keys:', responseData ? Object.keys(responseData) : 'null');
+      
+      // We now see the response has skill_map and user_id keys
+      if (!responseData || !responseData.skill_map) {
+        throw new ApplicationError('Invalid or missing skill map in API response', 500);
+      }
+      
+      const skillMapData = responseData.skill_map;
+      console.log('Skill map data keys:', Object.keys(skillMapData));
+      console.log('Skill map nodes:', skillMapData.nodes ? 'present' : 'missing');
+      
+      // Add an ID if missing
+      if (!skillMapData.id) {
+        skillMapData.id = `sm-${Date.now()}`;
+      }
+      
+      // Save to MongoDB
+      const skillMap = new SkillMap({
+        id: skillMapData.id,
+        root_skill: skillMapData.root_skill,
+        nodes: skillMapData.nodes || {},  // Provide empty object if nodes is missing
+        total_estimated_hours: skillMapData.total_estimated_hours || 0,
+        expected_completion_date: skillMapData.expected_completion_date || new Date(),
+        user_id: responseData.user_id || request.user_profile?.user_id
       });
-
-      return existingSkillMap.toObject();
-    } catch (error) {
-      logger.error('Failed to update skill map progress', { 
-        error: error instanceof Error ? error.message : error,
-        skillMapId,
-        userId 
-      });
-
-      throw new Error('Failed to update skill map progress');
+      
+      await skillMap.save();
+      
+      // Cache the result for future requests
+      cacheService.set(cacheKey, skillMap, 3600); // Cache for 1 hour
+      
+      return skillMap;
+    } catch (error: any) {  // Explicitly type error as any
+      logger.error('Error generating skill map:', error);
+      
+      if (error instanceof ApplicationError) {
+        throw error;
+      }
+      
+      // Handle Axios errors specifically
+      if (error.response) {
+        throw new ApplicationError(
+          `Python API error: ${error.response.status} - ${JSON.stringify(error.response.data)}`,
+          502 // Bad Gateway
+        );
+      }
+      
+      throw new ApplicationError('Failed to generate skill map', 500);
     }
   }
-
+  
   /**
-   * Retrieve a skill map by ID
-   * @param skillMapId Skill map identifier
-   * @returns Retrieved skill map
+   * Get a skill map by ID
    */
-  async getSkillMap(skillMapId: string): Promise<SkillMap | null> {
+  async getSkillMapById(id: string): Promise<ISkillMap> {
     try {
-      const skillMap = await SkillMapModel.findById(skillMapId);
-      return skillMap ? skillMap.toObject() : null;
-    } catch (error) {
-      logger.error('Failed to retrieve skill map', { 
-        error: error instanceof Error ? error.message : error,
-        skillMapId 
-      });
-
-      throw new Error('Failed to retrieve skill map');
+      const skillMap = await SkillMap.findById(id);
+      
+      if (!skillMap) {
+        throw new ApplicationError(`Skill map with ID ${id} not found`, 404);
+      }
+      
+      return skillMap;
+    } catch (error: any) {  // Explicitly type error as any
+      logger.error(`Error retrieving skill map with ID ${id}:`, error);
+      
+      if (error instanceof ApplicationError) {
+        throw error;
+      }
+      
+      throw new ApplicationError('Failed to retrieve skill map', 500);
     }
   }
-
+  
   /**
-   * Retrieve all skill maps for a user
-   * @param userId User identifier
-   * @returns List of user's skill maps
+   * Get skill maps for a specific user
    */
-  async getUserSkillMaps(userId: string): Promise<SkillMap[]> {
+  async getSkillMapsByUserId(userId: string): Promise<ISkillMap[]> {
     try {
-      const skillMaps = await SkillMapModel.find({ userId });
-      return skillMaps.map(map => map.toObject());
-    } catch (error) {
-      logger.error('Failed to retrieve user skill maps', { 
-        error: error instanceof Error ? error.message : error,
-        userId 
-      });
-
-      throw new Error('Failed to retrieve user skill maps');
+      const skillMaps = await SkillMap.find({ user_id: userId }).sort({ created_at: -1 });
+      return skillMaps;
+    } catch (error: any) {  // Explicitly type error as any
+      logger.error(`Error retrieving skill maps for user ${userId}:`, error);
+      throw new ApplicationError('Failed to retrieve user skill maps', 500);
     }
   }
-
+  
   /**
-   * Delete a skill map
-   * @param skillMapId Skill map identifier
-   * @returns Deleted skill map
+   * Create a cache key based on request parameters
    */
-  async deleteSkillMap(skillMapId: string): Promise<SkillMap | null> {
+  private generateCacheKey(request: SkillMapRequest): string {
+    // For simple requests, just use the skill name
+    if (!request.user_profile && !request.learning_preferences) {
+      return `skill-map:${request.skill_name.toLowerCase()}`;
+    }
+    
+    // For personalized requests, include relevant parameters in the key
+    const skillKey = request.skill_name.toLowerCase();
+    const skillLevel = request.user_profile?.current_skill_level || '';
+    const timeAvailability = request.user_profile?.time_availability?.hours_per_week.toString() || '';
+    const learningStyles = request.user_profile?.learning_style_preferences?.join('-') || '';
+    
+    return `skill-map:${skillKey}:${skillLevel}:${timeAvailability}:${learningStyles}`;
+  }
+  
+  /**
+   * Delete a skill map by ID
+   */
+  async deleteSkillMap(id: string): Promise<boolean> {
     try {
-      const deletedSkillMap = await SkillMapModel.findByIdAndDelete(skillMapId);
-      return deletedSkillMap ? deletedSkillMap.toObject() : null;
-    } catch (error) {
-      logger.error('Failed to delete skill map', { 
-        error: error instanceof Error ? error.message : error,
-        skillMapId 
-      });
-
-      throw new Error('Failed to delete skill map');
+      const result = await SkillMap.findByIdAndDelete(id);
+      
+      if (!result) {
+        throw new ApplicationError(`Skill map with ID ${id} not found`, 404);
+      }
+      
+      logger.info(`Deleted skill map with ID ${id}`);
+      return true;
+    } catch (error: any) {  // Explicitly type error as any
+      logger.error(`Error deleting skill map with ID ${id}:`, error);
+      
+      if (error instanceof ApplicationError) {
+        throw error;
+      }
+      
+      throw new ApplicationError('Failed to delete skill map', 500);
+    }
+  }
+  
+  /**
+   * Search for skill maps by name
+   */
+  async searchSkillMaps(query: string, limit: number = 10): Promise<ISkillMap[]> {
+    try {
+      // Create a regex for case-insensitive search
+      const searchRegex = new RegExp(query, 'i');
+      
+      const skillMaps = await SkillMap.find({ 
+        root_skill: searchRegex 
+      })
+      .limit(limit)
+      .sort({ created_at: -1 });
+      
+      return skillMaps;
+    } catch (error: any) {  // Explicitly type error as any
+      logger.error(`Error searching skill maps with query "${query}":`, error);
+      throw new ApplicationError('Failed to search skill maps', 500);
     }
   }
 }
 
-export default new SkillMapService();
+export default SkillMapService;

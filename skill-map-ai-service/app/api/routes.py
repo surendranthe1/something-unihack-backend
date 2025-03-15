@@ -31,7 +31,7 @@ async def generate_skill_map(request: SkillMapRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/update_progress", response_model=ProgressUpdateResponse)
+@router.post("/progress/record", response_model=ProgressUpdateResponse)
 async def update_progress(request: ProgressUpdateRequest):
     """
     Update progress on a skill map
@@ -50,3 +50,7 @@ async def update_progress(request: ProgressUpdateRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/router-test")
+async def router_test_endpoint():
+    return {"message": "Router test endpoint works!"}

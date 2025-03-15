@@ -5,6 +5,8 @@ from langchain_openai import ChatOpenAI
 from langchain_core.tools import Tool
 from typing import Dict, List, Any, Optional
 import json
+import os
+from datetime import datetime
 from app.core.config import settings
 
 class SkillMappingAgent:
@@ -40,21 +42,21 @@ class SkillMappingAgent:
     def _create_tools(self) -> List[Tool]:
         """Create the tools for the agent"""
         return [
-            Tool(
-                name="search_educational_resources",
-                func=self._search_educational_resources,
-                description="Search for educational resources related to a specific skill or topic. Input should be the skill or topic name."
-            ),
-            Tool(
-                name="estimate_learning_time",
-                func=self._estimate_learning_time,
-                description="Estimate the time required to learn a skill based on complexity and user's background. Input should be a JSON string with 'skill', 'complexity' (1-10), and 'background' fields."
-            ),
-            Tool(
-                name="analyze_skill_prerequisites",
-                func=self._analyze_skill_prerequisites,
-                description="Analyze what prerequisites are needed for a given skill. Input should be the skill name."
-            )
+            # Tool(
+            #     name="search_educational_resources",
+            #     func=self._search_educational_resources,
+            #     description="Search for educational resources related to a specific skill or topic. Input should be the skill or topic name."
+            # ),
+            # Tool(
+            #     name="estimate_learning_time",
+            #     func=self._estimate_learning_time,
+            #     description="Estimate the time required to learn a skill based on complexity and user's background. Input should be a JSON string with 'skill', 'complexity' (1-10), and 'background' fields."
+            # ),
+            # Tool(
+            #     name="analyze_skill_prerequisites",
+            #     func=self._analyze_skill_prerequisites,
+            #     description="Analyze what prerequisites are needed for a given skill. Input should be the skill name."
+            # )
         ]
     
     def _create_prompt(self) -> PromptTemplate:
@@ -122,7 +124,7 @@ class SkillMappingAgent:
         Observation: the result of the action
         ... (this Thought/Action/Action Input/Observation can repeat N times)
         Thought: I now know the final answer
-        Final Answer: the final answer to the original input question
+        Final Answer: the final answer to the original input question. Do not use ellipses or placeholders in JSON output. Provide the complete JSON.
         
         Begin! Remember to use the exact format shown above.
         
@@ -154,6 +156,19 @@ class SkillMappingAgent:
             
             # Extract the final answer
             result = response.get("output", "")
+
+            # Log the complete response to a text file
+            log_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            
+            log_file = os.path.join(log_dir, f"llm_response_{skill_name.replace(' ', '_')}.txt")
+            with open(log_file, "w") as f:
+                f.write(f"===== FULL LLM RESPONSE =====\n")
+                f.write(f"Skill: {skill_name}\n")
+                f.write(result)
+                f.write("\n\n===== END RESPONSE =====\n")
+            
+            print(f"LLM response logged to: {log_file}")
             
             # Parse the JSON from the result
             try:
@@ -172,6 +187,7 @@ class SkillMappingAgent:
                 
                 # Parse the JSON
                 skill_data = json.loads(json_str)
+            
                 return skill_data
             except json.JSONDecodeError as json_error:
                 # If JSON parsing fails, return a simplified structure

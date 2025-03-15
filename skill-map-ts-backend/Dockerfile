@@ -25,4 +25,4 @@ EXPOSE 8080
 ENV NODE_ENV=production
 
 # Run the application
-CMD ["npm", "start"]
+CMD ["node", "dist/app.js"]
