@@ -1,0 +1,71 @@
+skill-map-ts-backend/
+│
+├── src/
+│   ├── core/
+│   │   ├── config.ts          # Environment configuration 
+│   │   └── logger.ts          # Logging utility
+│
+│   ├── api/
+│   │   ├── models/             # TypeScript interfaces and models
+│   │   │   ├── skill.ts        # Skill-related models
+│   │   │   ├── user.ts         # User-related models
+│   │   │   ├── progress.ts     # Progress tracking models
+│   │   │   └── resource.ts     # Learning resource models
+│   │   │
+│   │   ├── routes/             # Express routes
+│   │   │   ├── skillRoutes.ts  # Skill map generation routes
+│   │   │   ├── userRoutes.ts   # User profile routes
+│   │   │   └── progressRoutes.ts # Progress tracking routes
+│   │   │
+│   │   └── controllers/        # Route handlers
+│   │       ├── skillController.ts
+│   │       ├── userController.ts
+│   │       └── progressController.ts
+│
+│   ├── services/               # Business logic services
+│   │   ├── skillMapService.ts  # Core skill map generation logic
+│   │   ├── aiService.ts        # Service for communicating with Python microservice
+│   │   ├── userService.ts      # User-related operations
+│   │   └── progressService.ts  # Progress tracking and adaptation
+│
+│   ├── middlewares/            # Express middlewares
+│   │   ├── errorHandler.ts     # Global error handling
+│   │   ├── authMiddleware.ts   # Authentication middleware
+│   │   └── validationMiddleware.ts # Request validation
+│
+│   ├── utils/                  # Utility functions
+│   │   ├── apiClient.ts        # HTTP client for microservice communication
+│   │   ├── validation.ts       # Input validation helpers
+│   │   └── helpers.ts          # General utility functions
+│
+│   ├── types/                  # TypeScript type definitions
+│   │   ├── skillMap.d.ts
+│   │   ├── user.d.ts
+│   │   └── progress.d.ts
+│
+│   └── app.ts                  # Express application setup
+│
+├── tests/
+│   ├── unit/
+│   │   ├── services/
+│   │   ├── controllers/
+│   │   └── utils/
+│   ├── integration/
+│   └── e2e/
+│
+├── config/
+│   ├── default.json            # Default configuration
+│   ├── development.json        # Development-specific config
+│   └── production.json         # Production-specific config
+│
+├── docker/
+│   ├── Dockerfile              # Docker configuration
+│   └── docker-compose.yml      # Docker compose setup
+│
+├── .env                        # Environment variables
+├── .env.example                # Example environment config
+├── package.json
+├── tsconfig.json
+├── jest.config.js
+├── .gitignore
+└── README.md
