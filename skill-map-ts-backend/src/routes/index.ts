@@ -1,6 +1,7 @@
 // src/routes/index.ts
 import { Router } from 'express';
 import skillMapRoutes from './skillMapRoutes';
+import skillProgramRoutes from './skillProgramRoutes';
 
 const router = Router();
 
@@ -11,5 +12,6 @@ router.get('/health', (req, res) => {
 
 // Register routes
 router.use('/skill-maps', skillMapRoutes);
+router.use('/skill-programs', skillProgramRoutes);
 
 export default router;
