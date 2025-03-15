@@ -5,7 +5,9 @@ from app.api.models import (
     SkillMapRequest, 
     SkillMapResponse,
     ProgressUpdateRequest,
-    ProgressUpdateResponse
+    ProgressUpdateResponse,
+    SkillProgramResponse,
+    SkillProgramRequest
 )
 from app.services.skill_map import SkillMapService
 

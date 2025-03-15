@@ -9,7 +9,9 @@ from app.api.models import (
     SkillResource,
     LearningPreferences,
     ProgressData,
-    ContextChange
+    ContextChange,
+    SkillProgram,
+    DailyTask,
 )
 from app.services.skill_agent import SkillMappingAgent
 import motor.motor_asyncio

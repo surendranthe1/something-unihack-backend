@@ -52,11 +52,11 @@ class SkillMappingAgent:
             #     func=self._estimate_learning_time,
             #     description="Estimate the time required to learn a skill based on complexity and user's background. Input should be a JSON string with 'skill', 'complexity' (1-10), and 'background' fields."
             # ),
-            # Tool(
-            #     name="analyze_skill_prerequisites",
-            #     func=self._analyze_skill_prerequisites,
-            #     description="Analyze what prerequisites are needed for a given skill. Input should be the skill name."
-            # )
+            Tool(
+                name="analyze_skill_prerequisites",
+                func=self._analyze_skill_prerequisites,
+                description="Analyze what prerequisites are needed for a given skill. Input should be the skill name."
+            )
         ]
     
     def _create_prompt(self) -> PromptTemplate:
