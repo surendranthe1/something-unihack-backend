@@ -24,111 +24,144 @@ class SkillMapService:
         self.skill_maps = self.db.skill_maps
         self.agent = SkillMappingAgent()
             
-    async def generate_skill_map(
+    async def generate_skill_program(
         self,
         skill_name: str,
         user_profile: Optional[UserProfile] = None,
-        time_frame: Optional[int] = None,
         preferences: Optional[LearningPreferences] = None
-    ) -> SkillMap:
+    ) -> SkillProgram:
         """
-        Generate a hierarchical skill map using the agent
+        Generate a 30-day skill program using the agent
         """
         try:
-            # Decide whether to use mock data or real agent
-            use_mock = False  # Set to False to use the agent
+            # Convert Pydantic models to dictionaries for the agent
+            user_profile_dict = user_profile.dict() if user_profile else None
+            preferences_dict = preferences.dict() if preferences else None
             
-            if use_mock:
-                # Use mock data for testing
-                result = self._mock_skill_hierarchy(skill_name)
-            else:
-                # Convert Pydantic models to dictionaries for the agent
-                user_profile_dict = user_profile.dict() if user_profile else None
-                preferences_dict = preferences.dict() if preferences else None
+            # Use the agent to generate the 30-day skill program
+            result = await self.agent.generate_skill_hierarchy(
+                skill_name=skill_name,
+                user_profile=user_profile_dict,
+                learning_preferences=preferences_dict,
+                time_frame=30  # Fixed to 30 days
+            )
+            
+            # Process the result to create daily tasks
+            skill_program_data = result["skill_program"]
+            daily_tasks = []
+            
+            for task_data in skill_program_data["daily_tasks"]:
+                resources = [
+                    SkillResource(
+                        type=resource["type"],
+                        name=resource["name"],
+                        url=resource.get("url", ""),
+                        description=resource.get("description", "")
+                    )
+                    for resource in task_data.get("resources", [])
+                ]
                 
-                # Use the agent to generate the skill hierarchy
-                result = await self.agent.generate_skill_hierarchy(
-                    skill_name=skill_name,
-                    user_profile=user_profile_dict,
-                    learning_preferences=preferences_dict,
-                    time_frame=time_frame
+                daily_task = DailyTask(
+                    day=task_data["day"],
+                    name=task_data["name"],
+                    description=task_data["description"],
+                    difficulty_level=task_data["difficulty_level"],
+                    estimated_hours=task_data["estimated_hours"],
+                    resources=resources,
+                    progress=0.0,
+                    status="not_started"
                 )
+                
+                daily_tasks.append(daily_task)
             
-            # Process the result to create skill nodes
-            nodes = self._create_nodes_from_llm_output(result["skills"])
+            # Calculate total hours
+            total_hours = sum(task.estimated_hours for task in daily_tasks)
             
-            # Calculate total hours and expected completion
-            total_hours = sum(node.estimated_hours for node in nodes.values() if not node.children)
+            # Set expected completion date (30 days from now)
+            expected_completion = datetime.now() + timedelta(days=30)
             
-            # Determine completion date based on weekly hours available
-            weekly_hours = user_profile.time_availability.hours_per_week if user_profile else 10
-            weeks_needed = total_hours / weekly_hours
-            expected_completion = datetime.now() + timedelta(weeks=weeks_needed)
-            
-            # Create the skill map
-            skill_map_data = {
-            "root_skill": skill_name,
-            "nodes": {k: v.dict() for k, v in nodes.items()},
-            "total_estimated_hours": total_hours,
-            "expected_completion_date": expected_completion,
-            "created_at": datetime.now(),
-            "updated_at": datetime.now()
+            # Create the skill program document
+            skill_program_doc = {
+                "skill_name": skill_program_data["skill_name"],
+                "description": skill_program_data["description"],
+                "total_hours": total_hours,
+                "daily_tasks": [task.dict() for task in daily_tasks],
+                "expected_completion_date": expected_completion,
+                "created_at": datetime.now(),
+                "updated_at": datetime.now()
             }
             
             # Add user_id if available
             if user_profile:
-                skill_map_data["user_id"] = user_profile.user_id
+                skill_program_doc["user_id"] = user_profile.user_id
             
             # Save to MongoDB
-            result = await self.skill_maps.insert_one(skill_map_data)
-            skill_map_id = str(result.inserted_id)
+            result = await self.skill_maps.insert_one(skill_program_doc)
+            skill_program_id = str(result.inserted_id)
             
-            # Create SkillMap object
-            skill_map = SkillMap(
-                id=skill_map_id,
-                root_skill=skill_name,
-                nodes=nodes,
-                total_estimated_hours=total_hours,
+            # Create SkillProgram object
+            skill_program = SkillProgram(
+                id=skill_program_id,
+                skill_name=skill_program_data["skill_name"],
+                description=skill_program_data["description"],
+                total_hours=total_hours,
+                daily_tasks=daily_tasks,
                 expected_completion_date=expected_completion
             )
-            return skill_map
+            
+            return skill_program
         
         except Exception as e:
-            print(f"Error generating skill map: {str(e)}")
+            print(f"Error generating skill program: {str(e)}")
             raise
-    
-    async def update_progress(
+
+    async def update_task_progress(
         self,
         user_id: str,
-        skill_map_id: str,
+        skill_program_id: str,
         progress_data: List[ProgressData],
         context_changes: Optional[List[ContextChange]] = None
-    ) -> SkillMap:
+    ) -> SkillProgram:
         """
-        Update progress and adapt the skill map if necessary
+        Update progress for daily tasks
         """
         try:
-            # Retrieve the skill map from MongoDB
-            skill_map_doc = await self.skill_maps.find_one({"_id": ObjectId(skill_map_id)})
+            # Retrieve the skill program from MongoDB
+            skill_program_doc = await self.skill_maps.find_one({"_id": ObjectId(skill_program_id)})
             
-            if not skill_map_doc:
-                raise ValueError(f"Skill map with ID {skill_map_id} not found")
+            if not skill_program_doc:
+                raise ValueError(f"Skill program with ID {skill_program_id} not found")
             
-            # Convert MongoDB document to SkillMap
-            nodes = {
-                k: SkillNode(**v) for k, v in skill_map_doc["nodes"].items()
-            }
+            # Convert MongoDB document to list of DailyTask objects
+            daily_tasks = []
+            for task_data in skill_program_doc["daily_tasks"]:
+                resources = [
+                    SkillResource(**resource) for resource in task_data.get("resources", [])
+                ]
+                
+                task = DailyTask(
+                    day=task_data["day"],
+                    name=task_data["name"],
+                    description=task_data["description"],
+                    difficulty_level=task_data["difficulty_level"],
+                    estimated_hours=task_data["estimated_hours"],
+                    resources=resources,
+                    progress=task_data.get("progress", 0.0),
+                    status=task_data.get("status", "not_started")
+                )
+                daily_tasks.append(task)
             
-            # Update progress for each node
+            # Update progress for each task
             for progress in progress_data:
-                if progress.node_id in nodes:
-                    node = nodes[progress.node_id]
-                    node.progress = progress.completion_percentage
-                    node.status = self._determine_status(progress.completion_percentage)
-                    nodes[progress.node_id] = node
+                # Find the task by day number (assuming node_id is the day number as a string)
+                day = int(progress.node_id)
+                for task in daily_tasks:
+                    if task.day == day:
+                        task.progress = progress.completion_percentage
+                        task.status = self._determine_status(progress.completion_percentage)
             
-            # If there are context changes, adapt the skill map
-            expected_completion_date = skill_map_doc["expected_completion_date"]
+            # If there are context changes, adjust the expected completion date
+            expected_completion_date = skill_program_doc["expected_completion_date"]
             if context_changes:
                 # Simple time adjustment based on impact factors
                 total_impact = sum(change.impact_factor for change in context_changes)
@@ -137,28 +170,29 @@ class SkillMapService:
             
             # Update in MongoDB
             await self.skill_maps.update_one(
-                {"_id": ObjectId(skill_map_id)},
+                {"_id": ObjectId(skill_program_id)},
                 {
                     "$set": {
-                        "nodes": {k: v.dict() for k, v in nodes.items()},
+                        "daily_tasks": [task.dict() for task in daily_tasks],
                         "expected_completion_date": expected_completion_date,
                         "updated_at": datetime.now()
                     }
                 }
             )
             
-            # Create SkillMap object for response
-            skill_map = SkillMap(
-                id=skill_map_id,
-                root_skill=skill_map_doc["root_skill"],
-                nodes=nodes,
-                total_estimated_hours=skill_map_doc["total_estimated_hours"],
+            # Create SkillProgram object for response
+            skill_program = SkillProgram(
+                id=skill_program_id,
+                skill_name=skill_program_doc["skill_name"],
+                description=skill_program_doc["description"],
+                total_hours=skill_program_doc["total_hours"],
+                daily_tasks=daily_tasks,
                 expected_completion_date=expected_completion_date
             )
             
-            return skill_map
+            return skill_program
         except Exception as e:
-            print(f"Error updating progress: {str(e)}")
+            print(f"Error updating task progress: {str(e)}")
             raise
     
     def _create_nodes_from_llm_output(self, skills_data: Dict[str, Any]) -> Dict[str, SkillNode]:

@@ -93,3 +93,30 @@ class ProgressUpdateResponse(BaseModel):
     user_id: str
     skill_map_id: str
     adjustment_summary: Optional[str] = None
+
+class DailyTask(BaseModel):
+    day: int
+    name: str
+    description: str
+    difficulty_level: str
+    estimated_hours: float
+    resources: List[SkillResource] = []
+    progress: float = 0.0
+    status: str = "not_started"
+
+class SkillProgram(BaseModel):
+    id: str
+    skill_name: str
+    description: str
+    total_hours: float
+    daily_tasks: List[DailyTask]
+    expected_completion_date: datetime
+
+class SkillProgramResponse(BaseModel):
+    skill_program: SkillProgram
+    user_id: Optional[str] = None
+
+class SkillProgramRequest(BaseModel):
+    skill_name: str
+    user_profile: Optional[UserProfile] = None
+    learning_preferences: Optional[LearningPreferences] = None

@@ -62,44 +62,44 @@ class SkillMappingAgent:
     def _create_prompt(self) -> PromptTemplate:
         """Create the prompt for the agent"""
         return PromptTemplate.from_template("""
-        You are a world-class educational expert specializing in skill decomposition and learning path creation.
-        Your task is to break down complex skills into logical, hierarchical learning paths.
+        You are a world-class educational expert specializing in skill development and daily learning task creation.
+        Your task is to create a 30-day skill development program with daily tasks.
         
-        ## Guidelines for Skill Decomposition:
-        1. Start with the main skill as the root node
-        2. Break it down into 3-5 major categories or sub-skills
-        3. For each sub-skill, further break it down into specific 5-6 learnable components 
-        4. Ensure a logical progression from fundamentals to advanced topics
-        5. Assign reasonable time estimates to each leaf node (concrete skill)
-        6. Include specific learning resources for each node
-        7. Consider the user's background, learning style, and time constraints
-        8. Add proper parent-child relationships and depth levels
-        9. Required to have 30 leaf nodes (non root nodes)
+        ## Guidelines for 30-Day Skill Program:
+        1. Create exactly 30 daily skill tasks that progress in difficulty
+        2. Ensure a logical progression from fundamentals to advanced topics
+        3. Each day should build upon previous learning
+        4. Assign reasonable time estimates to each daily task
+        5. Include specific learning resources for each task
+        6. Consider the user's background, learning style, and time constraints
+        7. Make tasks achievable within the day's time frame
+        8. Ensure all 30 days together lead to meaningful skill development
         
         ## Output Format:
         Your final answer must be valid JSON matching this structure:
         ```json
         {{
-        "skills": {{
-            "root": {{
-            "name": "Main Skill Name",
-            "description": "Description of the main skill",
-            "estimated_hours": 0,
-            "parent_id": null,
-            "children": ["id1", "id2", "id3"],
-            "depth": 0,
-            "resources": [{{"type": "book", "name": "Resource Name", "url": "URL"}}]
-            }},
-            "id1": {{
-            "name": "Sub-skill 1",
-            "description": "Description of sub-skill 1",
-            "estimated_hours": 0,
-            "parent_id": "root",
-            "children": ["id1-1", "id1-2"],
-            "depth": 1,
-            "resources": []
-            }},
-            ...
+        "skill_program": {{
+            "skill_name": "Main Skill Name",
+            "description": "Overall description of the 30-day program",
+            "total_hours": 0,
+            "daily_tasks": [
+                {{
+                    "day": 1,
+                    "name": "Task Name",
+                    "description": "Detailed description of the task",
+                    "difficulty_level": "Beginner",
+                    "estimated_hours": 1,
+                    "resources": [
+                        {{
+                            "type": "article",
+                            "name": "Resource Name",
+                            "url": "URL"
+                        }}
+                    ]
+                }},
+                ...
+            ]
         }}
         }}
         ```
@@ -108,7 +108,7 @@ class SkillMappingAgent:
         - Skill to learn: {skill_name}
         - User profile: {user_profile}
         - Learning preferences: {learning_preferences}
-        - Time frame: {time_frame} days
+        - Time frame: 30 days
         
         ## Tools Available
         You have access to the following tools:
@@ -128,7 +128,7 @@ class SkillMappingAgent:
         
         Begin! Remember to use the exact format shown above.
         
-        Question: Generate a skill map for {skill_name} based on the provided information.
+        Question: Generate a 30-day skill program for {skill_name} based on the provided information.
         {agent_scratchpad}
         """)
     
@@ -140,14 +140,14 @@ class SkillMappingAgent:
         time_frame: Optional[int] = None
     ) -> Dict[str, Any]:
         """
-        Generate a hierarchical skill map using the agent
+        Generate a 30-day skill program using the agent
         """
         # Prepare input for the agent
         input_data = {
             "skill_name": skill_name,
             "user_profile": json.dumps(user_profile) if user_profile else "None",
             "learning_preferences": json.dumps(learning_preferences) if learning_preferences else "None",
-            "time_frame": time_frame if time_frame else 90
+            "time_frame": 30  # Fixed to 30 days
         }
         
         try:
@@ -194,50 +194,40 @@ class SkillMappingAgent:
                 print(f"JSON parse error: {json_error}")
                 print(f"Failed to parse: {json_str}")
                 return {
-                    "skills": {
-                        "root": {
-                            "name": skill_name,
-                            "description": f"Learning path for {skill_name}",
-                            "estimated_hours": 40,
-                            "parent_id": None,
-                            "children": ["fundamentals"],
-                            "depth": 0,
-                            "resources": []
-                        },
-                        "fundamentals": {
-                            "name": f"{skill_name} Fundamentals",
-                            "description": f"Basic concepts of {skill_name}",
-                            "estimated_hours": 40,
-                            "parent_id": "root",
-                            "children": [],
-                            "depth": 1,
-                            "resources": [{"type": "general", "name": "Introduction resources"}]
-                        }
+                    "skill_program": {
+                        "skill_name": skill_name,
+                        "description": f"30-day skill program for {skill_name}",
+                        "total_hours": 30,
+                        "daily_tasks": [
+                            {
+                                "day": i,
+                                "name": f"Day {i} of {skill_name}",
+                                "description": f"Basic task for day {i}",
+                                "difficulty_level": "Beginner",
+                                "estimated_hours": 1,
+                                "resources": [{"type": "general", "name": "Introduction resources"}]
+                            } for i in range(1, 31)
+                        ]
                     }
                 }
         except Exception as exec_error:
             print(f"Agent execution error: {exec_error}")
             # Return simplified structure
             return {
-                "skills": {
-                    "root": {
-                        "name": skill_name,
-                        "description": f"Learning path for {skill_name}",
-                        "estimated_hours": 40,
-                        "parent_id": None,
-                        "children": ["fundamentals"],
-                        "depth": 0,
-                        "resources": []
-                    },
-                    "fundamentals": {
-                        "name": f"{skill_name} Fundamentals",
-                        "description": f"Basic concepts of {skill_name}",
-                        "estimated_hours": 40,
-                        "parent_id": "root",
-                        "children": [],
-                        "depth": 1,
-                        "resources": [{"type": "general", "name": "Introduction resources"}]
-                    }
+                "skill_program": {
+                    "skill_name": skill_name,
+                    "description": f"30-day skill program for {skill_name}",
+                    "total_hours": 30,
+                    "daily_tasks": [
+                        {
+                            "day": i,
+                            "name": f"Day {i} of {skill_name}",
+                            "description": f"Basic task for day {i}",
+                            "difficulty_level": "Beginner",
+                            "estimated_hours": 1,
+                            "resources": [{"type": "general", "name": "Introduction resources"}]
+                        } for i in range(1, 31)
+                    ]
                 }
             }
     
