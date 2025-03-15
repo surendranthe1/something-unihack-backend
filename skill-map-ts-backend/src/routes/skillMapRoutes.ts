@@ -1,6 +1,7 @@
 // src/routes/skillMapRoutes.ts
 import { Router } from 'express';
 import * as skillMapController from '../controllers/skillMapController';
+import {searchSkillMaps} from '../controllers/searchSkillMaps';
 import { validate } from '../middleware/validation';
 import { SkillMapRequestSchema } from '../models/dto/SkillMapDto';
 import { z } from 'zod';
@@ -67,5 +68,8 @@ router.delete(
   '/:id',
   skillMapController.deleteSkillMap
 );
+
+// Search skill maps
+router.get('/', searchSkillMaps);
 
 export default router;
