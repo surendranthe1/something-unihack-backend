@@ -1,0 +1,39 @@
+# Dependency directories
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables
+.env
+*.env
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+.tmp/
+.temp/
+
+# Mac files
+.DS_Store
+
+# Yarn
+yarn-error.log
+
+# npm
+npm-debug.log
+
+# Testing
+coverage/
+
+# Compiled TypeScript
+*.tsbuildinfo
