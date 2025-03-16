@@ -87,7 +87,7 @@ export class UserProgressService {
       const nodes = skillMap.nodes as Record<string, any>;
       Object.keys(nodes).forEach(nodeId => {
         skillProgress.set(nodeId, {
-          node_id: nodeId,
+          nodeId: nodeId,
           completion_percentage: 0,
           time_spent: 0
         });

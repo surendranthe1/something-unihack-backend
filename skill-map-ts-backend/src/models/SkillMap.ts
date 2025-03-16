@@ -4,6 +4,7 @@ import { ISkillNode } from './SkillNode';
 
 // Interface for skill map document
 export interface ISkillMap extends Document {
+  
   root_skill: string;                // The main skill name
   nodes: Record<string, ISkillNode>; // Dictionary of id -> node
   total_estimated_hours: number;     // Total hours to complete
