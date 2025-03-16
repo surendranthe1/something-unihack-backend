@@ -1,19 +1,65 @@
 // src/services/UserProgressService.ts
-import mongoose from 'mongoose';
-import UserProgress, { UserProgressDocument } from '../models/UserProgress';
-import SkillMap from '../models/SkillMap';
-import User from '../models/user';
+import mongoose, { Document } from 'mongoose';
+import UserProgress, { IUserProgress } from '../models/UserProgress';
+import SkillMap, { ISkillMap } from '../models/SkillMap';
+import User from '../models/User';
 import { ApplicationError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
+
+// Define interfaces for dashboard data types
+interface UpcomingSkill {
+  id: string;
+  name: string;
+  skill_map_id: string;
+  skill_map_name: string;
+  completion_percentage: number;
+  estimated_time_remaining: number;
+}
+
+interface ActiveSkillMap {
+  id: string;
+  name: string;
+  completion_rate: number;
+  days_completed: number;
+  last_activity: Date;
+}
+
+interface RecentActivity {
+  date: string;
+  minutes: number;
+}
+
+interface SkillCategory {
+  name: string;
+  count: number;
+  completed: number;
+  color: string;
+  completion_percentage: number;
+}
+
+interface DashboardData {
+  days_completed: number;
+  streak_days: number;
+  longest_streak: number;
+  overall_completion_rate: number;
+  badge_count: number;
+  skill_maps: ActiveSkillMap[];
+  recent_activity: RecentActivity[];
+  upcoming_skills: UpcomingSkill[];
+  skill_categories: SkillCategory[];
+}
+
+// Define a type for the document with _id
+type SkillMapDocument = Document & ISkillMap & { _id: mongoose.Types.ObjectId };
 
 export class UserProgressService {
   /**
    * Initialize user progress tracking for a skill map
    */
-  async initializeProgress(userId: string, skillMapId: string): Promise<UserProgressDocument> {
+  async initializeProgress(userId: string, skillMapId: string): Promise<IUserProgress> {
     try {
       // Verify user exists
-      const userExists = await User.exists({ userId });
+      const userExists = await User.exists({ user_id: userId });
       if (!userExists) {
         throw new ApplicationError('User not found', 404);
       }
@@ -26,8 +72,8 @@ export class UserProgressService {
       
       // Check if progress already exists
       const existingProgress = await UserProgress.findOne({ 
-        userId, 
-        skillMapId: new mongoose.Types.ObjectId(skillMapId) 
+        user_id: userId, 
+        skill_map_id: new mongoose.Types.ObjectId(skillMapId) 
       });
       
       if (existingProgress) {
@@ -37,25 +83,25 @@ export class UserProgressService {
       // Create initial skill progress map with all nodes at 0%
       const skillProgress = new Map();
       
-      skillMap.nodes.forEach((node, nodeId) => {
+      // If we're using the ISkillMap interface nodes are stored differently
+      const nodes = skillMap.nodes as Record<string, any>;
+      Object.keys(nodes).forEach(nodeId => {
         skillProgress.set(nodeId, {
-          nodeId,
-          completionPercentage: 0,
-          timeSpent: 0,
-          startedAt: undefined,
-          completedAt: undefined
+          node_id: nodeId,
+          completion_percentage: 0,
+          time_spent: 0
         });
       });
       
       // Create new progress document
       const userProgress = new UserProgress({
-        userId,
-        skillMapId: new mongoose.Types.ObjectId(skillMapId),
-        skillProgress,
-        startDate: new Date(),
-        dailyProgress: [{
+        user_id: userId,
+        skill_map_id: new mongoose.Types.ObjectId(skillMapId),
+        skill_progress: skillProgress,
+        start_date: new Date(),
+        daily_progress: [{
           date: new Date(),
-          minutesSpent: 0,
+          minutes_spent: 0,
           completed: false
         }]
       });
@@ -74,11 +120,11 @@ export class UserProgressService {
   /**
    * Get user progress for a skill map
    */
-  async getProgress(userId: string, skillMapId: string): Promise<UserProgressDocument> {
+  async getProgress(userId: string, skillMapId: string): Promise<IUserProgress> {
     try {
       const progress = await UserProgress.findOne({ 
-        userId, 
-        skillMapId: new mongoose.Types.ObjectId(skillMapId) 
+        user_id: userId, 
+        skill_map_id: new mongoose.Types.ObjectId(skillMapId) 
       });
       
       if (!progress) {
@@ -105,7 +151,7 @@ export class UserProgressService {
     completionPercentage: number,
     timeSpent: number,
     notes?: string
-  ): Promise<UserProgressDocument> {
+  ): Promise<IUserProgress> {
     try {
       // Validate inputs
       if (completionPercentage < 0 || completionPercentage > 100) {
@@ -120,7 +166,7 @@ export class UserProgressService {
       const progress = await this.getProgress(userId, skillMapId);
       
       // Get current node progress
-      const nodeProgress = progress.skillProgress.get(nodeId);
+      const nodeProgress = progress.skill_progress.get(nodeId);
       
       if (!nodeProgress) {
         throw new ApplicationError('Skill node not found', 404);
@@ -129,19 +175,19 @@ export class UserProgressService {
       // Update node progress
       const updatedNodeProgress = {
         ...nodeProgress,
-        completionPercentage,
-        timeSpent: nodeProgress.timeSpent + timeSpent,
+        completion_percentage: completionPercentage,
+        time_spent: nodeProgress.time_spent + timeSpent,
         notes: notes || nodeProgress.notes
       };
       
-      // Set startedAt if not already set and progress > 0
-      if (!nodeProgress.startedAt && completionPercentage > 0) {
-        updatedNodeProgress.startedAt = new Date();
+      // Set started_at if not already set and progress > 0
+      if (!nodeProgress.started_at && completionPercentage > 0) {
+        updatedNodeProgress.started_at = new Date();
       }
       
-      // Set completedAt if reaching 100%
-      if (completionPercentage === 100 && nodeProgress.completionPercentage < 100) {
-        updatedNodeProgress.completedAt = new Date();
+      // Set completed_at if reaching 100%
+      if (completionPercentage === 100 && nodeProgress.completion_percentage < 100) {
+        updatedNodeProgress.completed_at = new Date();
         
         // Award a badge for completing a skill if it doesn't exist already
         const badgeExists = progress.badges.some(badge => 
@@ -154,29 +200,29 @@ export class UserProgressService {
             name: 'Skill Mastered',
             description: `Completed the skill: ${nodeId}`,
             category: 'skill-completion',
-            earnedAt: new Date()
+            earned_at: new Date()
           });
         }
       }
       
       // Update the node in the map
-      progress.skillProgress.set(nodeId, updatedNodeProgress);
+      progress.skill_progress.set(nodeId, updatedNodeProgress);
       
       // Calculate overall completion rate
-      const totalNodes = progress.skillProgress.size;
-      const completedNodes = Array.from(progress.skillProgress.values())
-        .filter(node => node.completionPercentage === 100).length;
+      const totalNodes = progress.skill_progress.size;
+      const completedNodes = Array.from(progress.skill_progress.values())
+        .filter(node => node.completion_percentage === 100).length;
       
-      progress.overallCompletionRate = (completedNodes / totalNodes) * 100;
+      progress.overall_completion_rate = (completedNodes / totalNodes) * 100;
       
       // Update last activity
-      progress.lastActivity = new Date();
+      progress.last_activity = new Date();
       
       // Add to daily progress
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      const todayProgressIndex = progress.dailyProgress.findIndex(day => {
+      const todayProgressIndex = progress.daily_progress.findIndex(day => {
         const dayDate = new Date(day.date);
         dayDate.setHours(0, 0, 0, 0);
         return dayDate.getTime() === today.getTime();
@@ -184,22 +230,22 @@ export class UserProgressService {
       
       if (todayProgressIndex >= 0) {
         // Update existing entry
-        progress.dailyProgress[todayProgressIndex].minutesSpent += Math.round(timeSpent / 60);
+        progress.daily_progress[todayProgressIndex].minutes_spent += Math.round(timeSpent / 60);
         
         // Mark as completed if total time today is >= 30 minutes
-        if (progress.dailyProgress[todayProgressIndex].minutesSpent >= 30) {
-          progress.dailyProgress[todayProgressIndex].completed = true;
+        if (progress.daily_progress[todayProgressIndex].minutes_spent >= 30) {
+          progress.daily_progress[todayProgressIndex].completed = true;
           
           // Increment days completed if not already counted
-          if (!progress.dailyProgress[todayProgressIndex].completed) {
-            progress.daysCompleted += 1;
+          if (!progress.daily_progress[todayProgressIndex].completed) {
+            progress.days_completed += 1;
             
             // Update streak
-            progress.streakDays += 1;
+            progress.streak_days += 1;
             
             // Update longest streak if current streak is longer
-            if (progress.streakDays > progress.longestStreak) {
-              progress.longestStreak = progress.streakDays;
+            if (progress.streak_days > progress.longest_streak) {
+              progress.longest_streak = progress.streak_days;
             }
             
             // Award streak badges
@@ -208,9 +254,9 @@ export class UserProgressService {
         }
       } else {
         // Add new entry for today
-        progress.dailyProgress.push({
+        progress.daily_progress.push({
           date: today,
-          minutesSpent: Math.round(timeSpent / 60),
+          minutes_spent: Math.round(timeSpent / 60),
           completed: Math.round(timeSpent / 60) >= 30
         });
         
@@ -218,7 +264,7 @@ export class UserProgressService {
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
         
-        const yesterdayProgress = progress.dailyProgress.find(day => {
+        const yesterdayProgress = progress.daily_progress.find(day => {
           const dayDate = new Date(day.date);
           dayDate.setHours(0, 0, 0, 0);
           return dayDate.getTime() === yesterday.getTime();
@@ -226,14 +272,14 @@ export class UserProgressService {
         
         if (!yesterdayProgress || !yesterdayProgress.completed) {
           // Reset streak
-          progress.streakDays = 1;
+          progress.streak_days = 1;
         } else {
           // Continue streak
-          progress.streakDays += 1;
+          progress.streak_days += 1;
           
           // Update longest streak if current streak is longer
-          if (progress.streakDays > progress.longestStreak) {
-            progress.longestStreak = progress.streakDays;
+          if (progress.streak_days > progress.longest_streak) {
+            progress.longest_streak = progress.streak_days;
           }
           
           // Award streak badges
@@ -257,39 +303,45 @@ export class UserProgressService {
   }
   
   /**
-   * Get user progress dashboard data
+   * Get user progress dashboard data - calculates all metrics for the dashboard
    */
-  async getDashboardData(userId: string): Promise<any> {
+  async getDashboardData(userId: string): Promise<DashboardData> {
     try {
       // Get all user progress documents
-      const allProgress = await UserProgress.find({ userId })
-        .sort({ lastActivity: -1 });
+      const allProgress = await UserProgress.find({ user_id: userId })
+        .sort({ last_activity: -1 });
       
       if (allProgress.length === 0) {
         return {
-          daysCompleted: 0,
-          streakDays: 0,
-          longestStreak: 0,
-          overallCompletionRate: 0,
-          badgeCount: 0,
-          skillMaps: [],
-          recentActivity: [],
-          upcomingSkills: []
+          days_completed: 0,
+          streak_days: 0,
+          longest_streak: 0,
+          overall_completion_rate: 0,
+          badge_count: 0,
+          skill_maps: [],
+          recent_activity: [],
+          upcoming_skills: [],
+          skill_categories: []
         };
       }
       
       // Get all skill maps for the user's progress
-      const skillMapIds = allProgress.map(progress => progress.skillMapId);
+      const skillMapIds = allProgress.map(progress => progress.skill_map_id);
       const skillMaps = await SkillMap.find({ _id: { $in: skillMapIds } });
       
-      // Map skill maps to their IDs for easy lookup
-      const skillMapMap = new Map();
-      skillMaps.forEach(map => skillMapMap.set(map._id.toString(), map));
+      // Map skill maps to their IDs for easy lookup - FIXED THIS PART
+      const skillMapMap = new Map<string, SkillMapDocument>();
+      
+      skillMaps.forEach((map) => {
+        const typedMap = map as SkillMapDocument;
+        const mapId = typedMap._id.toString();
+        skillMapMap.set(mapId, typedMap);
+      });
       
       // Aggregate data from all progress documents
-      const totalDaysCompleted = allProgress.reduce((sum, progress) => sum + progress.daysCompleted, 0);
-      const currentStreak = Math.max(...allProgress.map(progress => progress.streakDays));
-      const longestStreak = Math.max(...allProgress.map(progress => progress.longestStreak));
+      const totalDaysCompleted = allProgress.reduce((sum, progress) => sum + progress.days_completed, 0);
+      const currentStreak = Math.max(...allProgress.map(progress => progress.streak_days));
+      const longestStreak = Math.max(...allProgress.map(progress => progress.longest_streak));
       
       // Count total badges
       const badgeCount = allProgress.reduce((sum, progress) => sum + progress.badges.length, 0);
@@ -297,79 +349,86 @@ export class UserProgressService {
       // Calculate weighted average completion rate
       const totalSkillMaps = allProgress.length;
       const overallCompletionRate = allProgress.reduce(
-        (sum, progress) => sum + progress.overallCompletionRate,
+        (sum, progress) => sum + progress.overall_completion_rate,
         0
       ) / totalSkillMaps;
       
       // Get most recent activity (last 7 days)
-      const recentActivityMap = new Map();
+      const recentActivityMap = new Map<string, number>();
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
       
       allProgress.forEach(progress => {
-        progress.dailyProgress
+        progress.daily_progress
           .filter(day => new Date(day.date) >= oneWeekAgo)
           .forEach(day => {
             const date = new Date(day.date).toISOString().split('T')[0];
             const current = recentActivityMap.get(date) || 0;
-            recentActivityMap.set(date, current + day.minutesSpent);
+            recentActivityMap.set(date, current + day.minutes_spent);
           });
       });
       
-      const recentActivity = Array.from(recentActivityMap.entries())
+      const recentActivity: RecentActivity[] = Array.from(recentActivityMap.entries())
         .map(([date, minutes]) => ({ date, minutes }))
         .sort((a, b) => a.date.localeCompare(b.date));
       
       // Get active skill maps with completion rates
-      const activeSkillMaps = allProgress.map(progress => {
-        const skillMap = skillMapMap.get(progress.skillMapId.toString());
+      const activeSkillMaps: ActiveSkillMap[] = allProgress.map(progress => {
+        const mapId = progress.skill_map_id.toString();
+        const skillMap = skillMapMap.get(mapId);
         return {
-          id: progress.skillMapId.toString(),
-          name: skillMap ? skillMap.rootSkill : 'Unknown Skill',
-          completionRate: progress.overallCompletionRate,
-          daysCompleted: progress.daysCompleted,
-          lastActivity: progress.lastActivity
+          id: mapId,
+          name: skillMap ? skillMap.root_skill : 'Unknown Skill',
+          completion_rate: progress.overall_completion_rate,
+          days_completed: progress.days_completed,
+          last_activity: progress.last_activity
         };
       });
       
       // Get upcoming skills (nodes with low progress)
-      const upcomingSkills = [];
+      const upcomingSkills: UpcomingSkill[] = [];
       
       allProgress.forEach(progress => {
-        const skillMap = skillMapMap.get(progress.skillMapId.toString());
+        const mapId = progress.skill_map_id.toString();
+        const skillMap = skillMapMap.get(mapId);
         if (!skillMap) return;
         
         // Get skills that are started but not completed
-        Array.from(progress.skillProgress.entries())
-          .filter(([_, node]) => node.completionPercentage > 0 && node.completionPercentage < 100)
+        Array.from(progress.skill_progress.entries())
+          .filter(([_, node]) => node.completion_percentage > 0 && node.completion_percentage < 100)
           .slice(0, 3) // Limit to 3 per skill map
           .forEach(([nodeId, node]) => {
-            const skillNode = skillMap.nodes.get(nodeId);
+            const nodes = skillMap.nodes as Record<string, any>;
+            const skillNode = nodes[nodeId];
             if (skillNode) {
               upcomingSkills.push({
                 id: nodeId,
                 name: skillNode.name,
-                skillMapId: progress.skillMapId.toString(),
-                skillMapName: skillMap.rootSkill,
-                completionPercentage: node.completionPercentage,
-                estimatedTimeRemaining: skillNode.estimatedHours * (1 - node.completionPercentage / 100) * 60 // in minutes
+                skill_map_id: mapId,
+                skill_map_name: skillMap.root_skill,
+                completion_percentage: node.completion_percentage,
+                estimated_time_remaining: skillNode.estimated_hours * (1 - node.completion_percentage / 100) * 60 // in minutes
               });
             }
           });
       });
       
       // Sort upcoming skills by completion percentage
-      upcomingSkills.sort((a, b) => a.completionPercentage - b.completionPercentage);
+      upcomingSkills.sort((a, b) => a.completion_percentage - b.completion_percentage);
+      
+      // Get skill categories breakdown
+      const skillCategories = this.calculateSkillCategories(allProgress, skillMapMap);
       
       return {
-        daysCompleted: totalDaysCompleted,
-        streakDays: currentStreak,
-        longestStreak,
-        overallCompletionRate,
-        badgeCount,
-        skillMaps: activeSkillMaps,
-        recentActivity,
-        upcomingSkills: upcomingSkills.slice(0, 5) // Return only top 5 skills
+        days_completed: totalDaysCompleted,
+        streak_days: currentStreak,
+        longest_streak: longestStreak,
+        overall_completion_rate: overallCompletionRate,
+        badge_count: badgeCount,
+        skill_maps: activeSkillMaps,
+        recent_activity: recentActivity,
+        upcoming_skills: upcomingSkills.slice(0, 5), // Return only top 5 skills
+        skill_categories: skillCategories
       };
     } catch (error: any) {
       logger.error(`Error retrieving dashboard data for user ${userId}:`, error);
@@ -378,15 +437,71 @@ export class UserProgressService {
   }
   
   /**
+   * Calculate skill categories and their completion stats
+   */
+  private calculateSkillCategories(
+    progresses: IUserProgress[], 
+    skillMapMap: Map<string, SkillMapDocument>
+  ): SkillCategory[] {
+    // Define standard categories
+    const categories: SkillCategory[] = [
+      { name: "Core Fundamentals", count: 0, completed: 0, color: "from-pink-500 to-purple-600", completion_percentage: 0 },
+      { name: "Practical Application", count: 0, completed: 0, color: "from-blue-500 to-indigo-600", completion_percentage: 0 },
+      { name: "Advanced Techniques", count: 0, completed: 0, color: "from-green-500 to-teal-600", completion_percentage: 0 },
+      { name: "Expert Level", count: 0, completed: 0, color: "from-yellow-500 to-amber-600", completion_percentage: 0 },
+    ];
+    
+    // Process all progresses
+    progresses.forEach(progress => {
+      const mapId = progress.skill_map_id.toString();
+      const skillMap = skillMapMap.get(mapId);
+      if (!skillMap) return;
+      
+      // Process each node
+      Array.from(progress.skill_progress.entries()).forEach(([nodeId, node]) => {
+        const nodes = skillMap.nodes as Record<string, any>;
+        const skillNode = nodes[nodeId];
+        if (!skillNode) return;
+        
+        // Determine category based on depth
+        let categoryIndex = 0;
+        if (skillNode.depth === 0) {
+          categoryIndex = 0; // Core Fundamentals
+        } else if (skillNode.depth === 1) {
+          categoryIndex = 1; // Practical Application
+        } else if (skillNode.depth === 2) {
+          categoryIndex = 2; // Advanced Techniques
+        } else {
+          categoryIndex = 3; // Expert Level
+        }
+        
+        // Update category stats
+        categories[categoryIndex].count++;
+        if (node.completion_percentage === 100) {
+          categories[categoryIndex].completed++;
+        }
+      });
+    });
+    
+    // Calculate completion percentages
+    return categories.map(category => ({
+      ...category,
+      completion_percentage: category.count > 0 
+        ? Math.round((category.completed / category.count) * 100) 
+        : 0
+    }));
+  }
+  
+  /**
    * Helper to check and award streak badges
    */
-  private checkAndAwardStreakBadges(progress: UserProgressDocument): void {
+  private checkAndAwardStreakBadges(progress: IUserProgress): void {
     // Define streak milestones for badges
-    const streakMilestones = [3, 7, 14, 30, 60, 90];
+    const streakMilestones = [3, 7, 14, 30];
     
     // Check if current streak hits any milestone
     streakMilestones.forEach(milestone => {
-      if (progress.streakDays === milestone) {
+      if (progress.streak_days === milestone) {
         const badgeId = `streak-${milestone}`;
         
         // Check if badge already exists
@@ -399,7 +514,7 @@ export class UserProgressService {
             name: `${milestone}-Day Streak`,
             description: `Maintained a learning streak for ${milestone} consecutive days`,
             category: 'streak',
-            earnedAt: new Date()
+            earned_at: new Date()
           });
         }
       }

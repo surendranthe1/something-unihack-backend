@@ -4,7 +4,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 // Schema for daily progress tracking
 const DailyProgressSchema = new Schema({
   date: { type: Date, required: true },
-  minutesSpent: { type: Number, default: 0 },
+  minutes_spent: { type: Number, default: 0 },
   completed: { type: Boolean, default: false },
   notes: { type: String }
 }, { _id: false });
@@ -12,12 +12,12 @@ const DailyProgressSchema = new Schema({
 // Schema for skill node progress
 const SkillProgressSchema = new Schema({
   nodeId: { type: String, required: true },
-  completionPercentage: { type: Number, default: 0 },
-  timeSpent: { type: Number, default: 0 }, // in minutes
-  startedAt: { type: Date },
-  completedAt: { type: Date },
+  completion_percentage: { type: Number, default: 0 },
+  time_spent: { type: Number, default: 0 }, // in minutes
+  started_at: { type: Date },
+  completed_at: { type: Date },
   notes: { type: String },
-  assessmentResults: { type: Schema.Types.Mixed }
+  assessment_results: { type: Schema.Types.Mixed }
 }, { _id: false });
 
 // Schema for badges/achievements
@@ -31,79 +31,79 @@ const BadgeSchema = new Schema({
 
 // Main UserProgress schema
 const UserProgressSchema = new Schema({
-  userId: { 
+  user_id: { 
     type: String, 
     required: true,
     index: true
   },
-  skillMapId: { 
+  skill_map_id: { 
     type: Schema.Types.ObjectId, 
     ref: 'SkillMap',
     required: true
   },
-  dailyProgress: [DailyProgressSchema],
-  skillProgress: {
+  daily_progress: [DailyProgressSchema],
+  skill_progress: {
     type: Map,
     of: SkillProgressSchema,
     default: {}
   },
   badges: [BadgeSchema],
-  startDate: { type: Date, required: true },
-  lastActivity: { type: Date, default: Date.now },
-  daysCompleted: { type: Number, default: 0 },
-  streakDays: { type: Number, default: 0 },
-  longestStreak: { type: Number, default: 0 },
-  overallCompletionRate: { type: Number, default: 0 }, // percentage
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-});
+  start_date: { type: Date, required: true },
+  last_activity: { type: Date, default: Date.now },
+  days_completed: { type: Number, default: 0 },
+  streak_days: { type: Number, default: 0 },
+  longest_streak: { type: Number, default: 0 },
+  overall_completion_rate: { type: Number, default: 0 }, // percentage
+  created_at: { type: Date, default: Date.now },
+  updated_at: { type: Date, default: Date.now }
+}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 // Create compound index for userId and skillMapId
-UserProgressSchema.index({ userId: 1, skillMapId: 1 }, { unique: true });
+UserProgressSchema.index({ user_id: 1, skill_map_id: 1 }, { unique: true });
 
 // Update updatedAt timestamp before saving
-UserProgressSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
-  next();
-});
+// UserProgressSchema.pre('save', function(next) {
+//   this.updatedAt = new Date();
+//   next();
+// });
 
 // Define interface for UserProgress document
-export interface UserProgressDocument extends Document {
-  userId: string;
-  skillMapId: mongoose.Types.ObjectId;
-  dailyProgress: Array<{
-    date: Date;
-    minutesSpent: number;
-    completed: boolean;
-    notes?: string;
-  }>;
-  skillProgress: Map<string, {
-    nodeId: string;
-    completionPercentage: number;
-    timeSpent: number;
-    startedAt?: Date;
-    completedAt?: Date;
-    notes?: string;
-    assessmentResults?: any;
-  }>;
-  badges: Array<{
-    id: string;
-    name: string;
-    description: string;
-    category: string;
-    earnedAt: Date;
-  }>;
-  startDate: Date;
-  lastActivity: Date;
-  daysCompleted: number;
-  streakDays: number;
-  longestStreak: number;
-  overallCompletionRate: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
+export interface IUserProgress extends Document {
+    user_id: string;
+    skill_map_id: mongoose.Types.ObjectId;
+    daily_progress: Array<{
+      date: Date;
+      minutes_spent: number;
+      completed: boolean;
+      notes?: string;
+    }>;
+    skill_progress: Map<string, {
+      node_id: string;
+      completion_percentage: number;
+      time_spent: number;
+      started_at?: Date;
+      completed_at?: Date;
+      notes?: string;
+      assessment_results?: any;
+    }>;
+    badges: Array<{
+      id: string;
+      name: string;
+      description: string;
+      category: string;
+      earned_at: Date;
+    }>;
+    start_date: Date;
+    last_activity: Date;
+    days_completed: number;
+    streak_days: number;
+    longest_streak: number;
+    overall_completion_rate: number;
+    created_at: Date;
+    updated_at: Date;
+  }
 
 // Create and export the model
-const UserProgress = mongoose.model<UserProgressDocument>('UserProgress', UserProgressSchema);
+const UserProgress = mongoose.model<IUserProgress>('UserProgress', UserProgressSchema);
 
 export default UserProgress;
