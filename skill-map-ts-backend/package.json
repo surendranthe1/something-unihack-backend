@@ -10,7 +10,8 @@
     "test": "jest",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
-    "test:mongodb": "ts-node src/test/testMongoDB.ts"
+    "test:mongodb": "ts-node src/test/testMongoDB.ts",
+    "test:dashboard": "ts-node src/test/testDashboardIntegration.ts"
   },
   "keywords": [
     "skill-map",

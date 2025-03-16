@@ -1,6 +1,6 @@
 // src/controllers/userProgressController.ts
 import { Request, Response, NextFunction } from 'express';
-import { UserProgressService } from '../services/UserProgressService';
+import { UserProgressService } from '../services/userProgressService';
 import logger from '../utils/logger';
 import { ApplicationError } from '../middleware/errorHandler';
 import { z } from 'zod';
